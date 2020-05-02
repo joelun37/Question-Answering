@@ -17,11 +17,28 @@ Output:
 
 import json
 example_txt = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/simplified-nq-train-for-content.json"
+dev_example = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/v1.0-simplified_nq-dev-all-for-content.json"
 
-with open(example_txt, 'r') as f:
-    example_dict = json.load(f)
+def test_simplify_nq_example(input_text_file):
 
-simplfied_ex = simplify_nq_example(example_dict)
+    with open(input_text_file, 'r') as f:
+        for line in f:
+            example_dict = json.loads(line) 
+            simplfied_ex = simplify_nq_example(example_dict)
+
+    return simplfied_ex
+
+
+dict = test_simplify_nq_example(input_text_file=dev_example)
+
+def test_simplify_nq_example(input_text_file):
+
+    with open(input_text_file, 'r') as f:
+        example_dict = json.load(f) 
+    simplfied_ex = simplify_nq_example(example_dict)
+    return simplfied_ex
+
+dev_ex = test_simplify_nq_example(input_text_file=dev_example)
 
 my_list = txt.split(" ")
 
