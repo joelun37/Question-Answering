@@ -41,7 +41,7 @@ def test_simplify_nq_example(input_text_file):
 
 simplified_dev_example = test_simplify_nq_example(dev_example)
 
-my_list = txt.split(" ")
+my_list = txt.split(" ") 
 
 long_answer = []
 for i in range(1952,2019):
