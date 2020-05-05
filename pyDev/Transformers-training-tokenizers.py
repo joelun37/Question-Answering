@@ -158,3 +158,4 @@ output_tf, output_pt = model_tf(input_tf), model_pt(**input_pt)
 # Here we compare the output differences between PyTorch and TensorFlow.
 for name, o_tf, o_pt in zip(["output", "pooled"], output_tf, output_pt):
     print("{} differences: {}".format(name, (o_tf.numpy() - o_pt.numpy()).sum()))
+
