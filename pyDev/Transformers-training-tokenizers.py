@@ -146,3 +146,15 @@ from transformers import TFBertModel, BertModel
 # Let's load a BERT model for TensorFlow and PyTorch
 model_tf = TFBertModel.from_pretrained('bert-base-cased')
 model_pt = BertModel.from_pretrained('bert-base-cased')
+
+# transformers generates a ready to use dictionary with all the required parameters for the specific framework.
+input_tf = tokenizer.encode_plus("This is a sample input", return_tensors="tf")
+input_pt = tokenizer.encode_plus("This is a sample input", return_tensors="pt")
+
+# Let's compare the outputs
+output_tf, output_pt = model_tf(input_tf), model_pt(**input_pt)
+
+# Models outputs 2 values (The value for each tokens, the pooled representation of the input sentence)
+# Here we compare the output differences between PyTorch and TensorFlow.
+for name, o_tf, o_pt in zip(["output", "pooled"], output_tf, output_pt):
+    print("{} differences: {}".format(name, (o_tf.numpy() - o_pt.numpy()).sum()))

@@ -19,17 +19,18 @@ import json
 example_txt = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/simplified-nq-train-for-content.json"
 dev_example = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/v1.0-simplified_nq-dev-all-for-content.json"
 
-def test_simplify_nq_example(input_text_file):
+def raw_NQ_data_dict(input_text_file):
 
     with open(input_text_file, 'r') as f:
         for line in f:
             example_dict = json.loads(line) 
-            simplfied_ex = simplify_nq_example(example_dict)
+            simplfied_ex =   (example_dict)
 
     return simplfied_ex
 
+test_dict = raw_NQ_data_dict(input_text_file=example_txt)
 
-dict = test_simplify_nq_example(input_text_file=dev_example)
+dict = raw_NQ_data_dict(input_text_file=dev_example)
 
 def test_simplify_nq_example(input_text_file):
 
@@ -38,7 +39,7 @@ def test_simplify_nq_example(input_text_file):
     simplfied_ex = simplify_nq_example(example_dict)
     return simplfied_ex
 
-dev_ex = test_simplify_nq_example(input_text_file=dev_example)
+simplified_dev_example = test_simplify_nq_example(dev_example)
 
 my_list = txt.split(" ")
 
@@ -58,3 +59,16 @@ for i in range(1960,1969):
 txt_short_answer = ""
 for i in range(len(short_answer)):
     txt_short_answer += " " + short_answer[i]
+
+
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
+import torch
+
+tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+model = AutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+
+text = test_dict["document_text"]
+question = test_dict["question_text"]
+
+inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="pt")
+
