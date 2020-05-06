@@ -27,7 +27,7 @@ def raw_NQ_data_dict(input_text_file):
             simplfied_ex =   (example_dict)
 
     return simplfied_ex
-
+ 
 test_dict = raw_NQ_data_dict(input_text_file=example_txt)
 
 dict = raw_NQ_data_dict(input_text_file=dev_example)
