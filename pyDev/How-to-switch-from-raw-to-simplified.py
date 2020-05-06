@@ -20,7 +20,7 @@ example_txt = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-que
 dev_example = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/v1.0-simplified_nq-dev-all-for-content.json"
  
 def raw_NQ_data_dict(input_text_file):
-
+ 
     with open(input_text_file, 'r') as f:
         for line in f:
             example_dict = json.loads(line) 
