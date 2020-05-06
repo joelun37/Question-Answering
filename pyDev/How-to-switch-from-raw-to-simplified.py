@@ -31,7 +31,7 @@ def raw_NQ_data_dict(input_text_file):
 test_dict = raw_NQ_data_dict(input_text_file=example_txt)
 
 dict = raw_NQ_data_dict(input_text_file=dev_example)
-
+ 
 def test_simplify_nq_example(input_text_file):
 
     with open(input_text_file, 'r') as f:
