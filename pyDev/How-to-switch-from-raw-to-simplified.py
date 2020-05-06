@@ -15,10 +15,10 @@ Output:
 - simplified_ex: it's a dictionary in the simplified data format.
 """
 
-import json
+import json 
 example_txt = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/simplified-nq-train-for-content.json"
 dev_example = "/Volumes/750GB-HDD/root/Question-Answering/pyData/tensorflow2-question-answering/v1.0-simplified_nq-dev-all-for-content.json"
-
+ 
 def raw_NQ_data_dict(input_text_file):
 
     with open(input_text_file, 'r') as f:
