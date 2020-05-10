@@ -67,3 +67,47 @@ answer_end = torch.argmax(answer_end_scores) + 1  # Get the most likely end of a
 answer = tokenizer.convert_tokens_to_string(tokenizer.convert_ids_to_tokens(input_ids[answer_start:answer_end]))
 print(f"Question: {question_text}")
 print(f"Answer: {answer}\n")
+
+# Bare BERT
+from transformers import BertTokenizer
+from transformers import BertModel
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained('bert-base-uncased')
+
+inputs = tokenizer.encode_plus(question_text, remove_html_tags(text), add_special_tokens=True, return_tensors="pt")
+input_ids = inputs["input_ids"].tolist()[0]
+text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+
+input_ids = torch.tensor(tokenizer.encode("golden")).unsqueeze(0)  # Batch size 1
+
+text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+
+outputs = model(inputs)
+last_hidden_states = outputs[0].detach().numpy()
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained('bert-base-uncased')
+input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+outputs = model(input_ids)
+last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+
+# Set text
+my_text = "golden"
+my_second_text = "sciences"
+my_third_text = "concert"
+
+# Tokenize text
+inputs = tokenizer.encode_plus(my_text, my_second_text+" "+my_third_text, add_special_tokens=True, return_tensors="pt")
+input_ids = inputs["input_ids"].tolist()[0]
+text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+
+# Convert inputs to tensor
+input_ids_tensor = torch.tensor(inputs).unsqueeze(0)
+
+# Model
+outputs = model(**inputs)
+
+# Last hidden states
+last_hidden_states = outputs[0]
+last_hidden_states_np = last_hidden_states.detach().numpy().reshape(6, 768)
