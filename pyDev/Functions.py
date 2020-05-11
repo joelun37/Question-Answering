@@ -534,3 +534,18 @@ def plot_conf_mat(CM, ax, title="Model"):
   ax.set_title(str(title))
   ax.set_ylabel("True label")
   ax.set_xlabel("Predicted label")
+
+
+def raw_NQ_data_dict(input_text_file):
+ 
+    with open(input_text_file, 'r') as f:
+        for line in f:
+            example_dict = json.loads(line) 
+            simplfied_ex =   (example_dict)
+
+    return simplfied_ex
+
+def remove_html_tags(text):
+    """Remove html tags from a string"""
+    clean = re.compile('<.*?>')
+    return re.sub(clean, '', text)

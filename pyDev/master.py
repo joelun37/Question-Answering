@@ -111,3 +111,4 @@ outputs = model(**inputs)
 # Last hidden states
 last_hidden_states = outputs[0]
 last_hidden_states_np = last_hidden_states.detach().numpy().reshape(6, 768)
+
