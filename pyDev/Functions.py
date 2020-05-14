@@ -549,3 +549,63 @@ def remove_html_tags(text):
     """Remove html tags from a string"""
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
+
+def compute_co_occurrence_matrix(corpus, window_size=4):
+    """ Compute co-occurrence matrix for the given corpus and window_size (default of 4).
+    
+        Note: Each word in a document should be at the center of a window. Words near edges will have a smaller
+              number of co-occurring words.
+              
+              For example, if we take the document "<START> All that glitters is not gold <END>" with window size of 4,
+              "All" will co-occur with "<START>", "that", "glitters", "is", and "not".
+    
+        Params:
+            corpus (list of list of strings): corpus of documents
+            window_size (int): size of context window
+        Return:
+            M (a symmetric numpy matrix of shape (number of unique words in the corpus , number of unique words in the corpus)): 
+                Co-occurence matrix of word counts. 
+                The ordering of the words in the rows/columns should be the same as the ordering of the words given by the distinct_words function.
+            word2Ind (dict): dictionary that maps word to index (i.e. row/column number) for matrix M.
+    """
+    words, num_words = distinct_words(corpus)
+    M = None
+    word2Ind = {}
+    
+    # ------------------
+    # Write your implementation here.
+    word2Ind = dict(zip(words, range(num_words)))
+    
+    # Create an empty dictionary for each word
+    # We'll then use this dictionary to build the matrix M by counting each occurence
+    my_dict = {word: [] for word in words}
+    
+    # Temporary corpus list in order to keep the original corpus
+    tmp_corpus = np.array(corpus)
+    
+    # Looping over the corpus to populate my_dict
+    for sentence in tmp_corpus:
+    # We use i as an index of the word we're calculating the window of
+    # By definition it always starts at 0 then it is incremented inside the for-loop
+        for i, word in enumerate(sentence):
+            for window in range(window_size):
+                if ((i + window + 1) < len(sentence)):
+                    my_dict[word].append(sentence[i + window + 1])
+                if ((i - window -1) > -1):
+                    my_dict[word].append(sentence[i - window - 1])
+ 
+    # Initialize M with zeros
+    M = np.zeros((num_words, num_words))
+    
+    # Populate M
+    for word_dict in my_dict:
+        unique, counts = np.unique(my_dict[word_dict], return_counts=True)
+        i = word2Ind[word_dict]
+        for word in my_dict[word_dict]:
+            j = word2Ind[word]
+            value = counts[np.where(unique == word)]
+            M[i,j] = value
+        
+    # ------------------
+
+    return M, word2Ind

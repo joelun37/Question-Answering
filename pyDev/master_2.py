@@ -44,7 +44,7 @@ with open(nq_train_txt_short, 'r') as f:
         long_answer_candidate_index = obs["annotations"][0]["long_answer"]["candidate_index"]
         long_answer_start = obs["long_answer_candidates"][long_answer_candidate_index]["start_token"]
         long_answer_end = obs["long_answer_candidates"][long_answer_candidate_index]["end_token"]
-        long_answer =""
+        long_answer = ""
         
         for i in range(long_answer_start, long_answer_end):
             long_answer += obs["document_text"].split()[i] + " "
@@ -53,19 +53,15 @@ with open(nq_train_txt_short, 'r') as f:
             dict_obs["question"].append(obs["question_text"])
             dict_obs["long_answer"].append(remove_html_tags(long_answer))
 
-            question_inputs = tokenizer.encode_plus(obs["question_text"], add_special_tokens=True, return_tensors="pt")
-            question_input_ids = question_inputs["input_ids"].tolist()[0]
-            question_text_tokens = tokenizer.convert_ids_to_tokens(question_input_ids)
 
-            long_answer_inputs = tokenizer.encode_plus(remove_html_tags(long_answer), add_special_tokens=True, return_tensors="pt")
-            long_answer_input_ids = long_answer_inputs["input_ids"].tolist()[0]
-            long_answer_text_tokens = tokenizer.convert_ids_to_tokens(long_answer_input_ids)
+            inputs = tokenizer.encode_plus(obs["question_text"], remove_html_tags(long_answer), add_special_tokens=True, return_tensors="pt")
+            input_ids = inputs["input_ids"].tolist()[0]
+            text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
 
-            question_outputs = model(**question_inputs)
-            long_answer_outputs = model(**long_answer_inputs)
+            outputs = model(**inputs)
 
            # Last hidden states
-            question_last_hidden_states = question_outputs[0].detach().numpy().reshape(len(question_text_tokens), 768)
+            hidden_states = question_outputs[0].detach().numpy().reshape(len(question_text_tokens), 768)
             long_answer_last_hidden_states = long_answer_outputs[0].detach().numpy().reshape(len(long_answer_text_tokens), 768)
 
            # Transformed
@@ -141,3 +137,7 @@ last_hidden_states = outputs[0].detach().numpy().reshape(len(text_tokens), 768)
 
 questions = last_hidden_states[0]
 
+
+inputs = tokenizer.encode_plus("Am I Evil", "Yes I am", add_special_tokens=True, return_tensors="pt")
+input_ids = inputs["input_ids"].tolist()[0]
+text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
