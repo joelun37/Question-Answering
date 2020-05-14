@@ -47,21 +47,13 @@ from sklearn.linear_model import LinearRegression
 
 # Set parameters and paths
 pyData = "/Volumes/750GB-HDD/root/Question-Answering/pyData/"
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
+# tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+# model = BertModel.from_pretrained('bert-base-uncased')
 
 # Import data
 nq_train_txt_short = pyData + "tensorflow2-question-answering/simplified-nq-train-short.json"
 
-dict_obs = {}
-with open(nq_train_txt_short, 'r') as f:
-    for line in f:
-        obs = json.loads(line)
-        dict_obs[obs["example_id"]] = obs
-
 parts_dict = {}
-window_size = 509 - len(obs["question_text"])
-step_size = 128
 
 """
 The loop below contains a minor bug. It does not take into account the last window
@@ -100,40 +92,69 @@ input_ids.append(encoded_dict["input_ids"])
 for i in range(len(input_ids)):
     print(input_ids[i].shape[1])
 
+
+
 # Transform dictionary of observations
+dict_obs = {}
+with open(nq_train_txt_short, 'r') as f:
+    for line in f:
+        obs = json.loads(line)
+        dict_obs[obs["example_id"]] = obs
+
 transformed_dict_obs = {}
+step_size = 128
 parts_dict = {}
+obs={}
 for key in dict_obs:
     if dict_obs[key]["annotations"][0]["long_answer"]["candidate_index"] != -1:
         transformed_dict_obs[key]={}
         obs = dict_obs[key]
-        sentence=obs["document_text"]
-        lst_sentence = sentence.split()
-        parts_dict[obs["example_id"]] = {}
-        parts_dict[obs["example_id"]]["question_text"] = obs["question_text"]
-        parts_dict[obs["example_id"]]["passages"] = []
-        parts_dict[obs["example_id"]]["answer_start_ix"] = []
-        parts_dict[obs["example_id"]]["answer_end_ix"] = []
-        la_start = dict_obs[key]["annotations"][0]["long_answer"]["start_token"]
-        la_end = dict_obs[key]["annotations"][0]["long_answer"]["end_token"]
-        parts_dict[obs["example_id"]]["long_answer"] = lst_sentence[la_start:la_end]
+        window_size = 509 - len(obs["question_text"])
+        if dict_obs[key]["annotations"][0]["long_answer"]["end_token"] - dict_obs[key]["annotations"][0]["long_answer"]["start_token"] <= window_size:
+            sentence=obs["document_text"]
+            lst_sentence = sentence.split()
+            # Create dictionary entry
+            parts_dict[obs["example_id"]] = {}
+            parts_dict[obs["example_id"]]["question_text"] = obs["question_text"]
+            parts_dict[obs["example_id"]]["passages"] = []
+            parts_dict[obs["example_id"]]["answer_start_ix"] = []
+            parts_dict[obs["example_id"]]["answer_end_ix"] = []
+            la_start = dict_obs[key]["annotations"][0]["long_answer"]["start_token"]
+            la_end = dict_obs[key]["annotations"][0]["long_answer"]["end_token"]
+            parts_dict[obs["example_id"]]["long_answer"] = lst_sentence[la_start:la_end]
 
-        for i in range(len(lst_sentence)):
-            if  ((window_size+(i*step_size) - 1) < len(lst_sentence)):
-                part_of_sentence = [lst_sentence[word] for word in range(i*step_size, window_size+(i*step_size))]
-                parts_dict[obs["example_id"]]["passages"].append(" ".join(part_of_sentence))
-                if (i*step_size <= la_start) and (window_size+(i*step_size) >= la_end):
-                    start_ix = (la_start - i*step_size)
-                    end_ix = (la_end - i*step_size)
-                else:
-                    start_ix = 0
-                    end_ix = 0
-                parts_dict[obs["example_id"]]["answer_start_ix"].append(start_ix)
-                parts_dict[obs["example_id"]]["answer_end_ix"].append(end_ix)
+            if len(lst_sentence) > window_size:
+                for i in range(len(lst_sentence)):
+                    if  ((window_size+(i*step_size) - 1) < len(lst_sentence)):
+                        part_of_sentence = [lst_sentence[word] for word in range(i*step_size, window_size+(i*step_size))]
+                        parts_dict[obs["example_id"]]["passages"].append(" ".join(part_of_sentence))
+                        if (i*step_size <= la_start) and (window_size+(i*step_size) >= la_end):
+                            start_ix = (la_start - i*step_size)
+                            end_ix = (la_end - i*step_size)
+                        else:
+                            start_ix = 0
+                            end_ix = 0
+
+                        parts_dict[obs["example_id"]]["answer_start_ix"].append(start_ix)
+                        parts_dict[obs["example_id"]]["answer_end_ix"].append(end_ix)
             else:
-                parts_dict[obs["example_id"]]["passages"].append(" ".join(lst_sentence))
-                start_ix = la_start
-                end_ix = la_end
+                parts_dict[obs["example_id"]]["passages"].append(obs["document_text"])
+                parts_dict[obs["example_id"]]["answer_start_ix"].append(la_start)
+                parts_dict[obs["example_id"]]["answer_end_ix"].append(la_end)
+
+for key in parts_dict.keys():
+    print(key)
+    print(len(parts_dict[key]["answer_start_ix"]))
+    print(len(parts_dict[key]["answer_end_ix"]))
+    print(len(parts_dict[key]["passages"]))
+        # else:
+        #     print("That guy")
+        #     print(f"LASTART is {la_start}")
+        #     parts_dict[obs["example_id"]]["passages"].append(" ".join(lst_sentence))
+        #     start_ix = la_start
+        #     end_ix = la_end
+        #     parts_dict[obs["example_id"]]["answer_start_ix"].append(start_ix)
+        #     parts_dict[obs["example_id"]]["answer_end_ix"].append(end_ix)
 
     # Downsampling
         for key in parts_dict.keys():
@@ -141,49 +162,32 @@ for key in dict_obs:
                 valid_ix = np.argwhere(parts_dict[key]["answer_start_ix"])
                 valid_ix = valid_ix.reshape(1, -1)[0].tolist()
                 all_ix = [i for i in range(len(parts_dict[key]["answer_start_ix"]))]
-                for j in X:
-                    all_ix.remove(valid_ix)
                 null_sample_ix = np.random.choice(all_ix, len(valid_ix)).tolist()
                 sample_ix = valid_ix + null_sample_ix
 
-        parts_dict[key]["answer_start_ix"] = np.array(parts_dict[key]["answer_start_ix"])[sample_ix]
-        parts_dict[key]["answer_end_ix"] = np.array(parts_dict[key]["answer_end_ix"])[sample_ix]
-        parts_dict[key]["passages"] = np.array(parts_dict[key]["passages"])[sample_ix]
+                print(key)
 
+                parts_dict[key]["answer_start_ix"] = np.array(parts_dict[key]["answer_start_ix"])[sample_ix]
+                parts_dict[key]["answer_end_ix"] = np.array(parts_dict[key]["answer_end_ix"])[sample_ix]
+                parts_dict[key]["passages"] = np.array(parts_dict[key]["passages"])[sample_ix]
+
+                print(key)
+                print(len(parts_dict[key]["answer_start_ix"]))
+                print(len(parts_dict[key]["answer_end_ix"]))
+                print(len(parts_dict[key]["passages"]))
+
+# Sanity check
 for key in parts_dict.keys():
     print('\n')
     print(f"Key is {key}")
-    print(parts_dict[key]["answer_start_ix"])
     print(parts_dict[key]["question_text"])
-
-print(dict_obs[831951689239959926]["annotations"][0]["long_answer"]["candidate_index"])
-
-parts_dict[831951689239959926]["answer_start_ix"]
-
-from random import choice
-
-print(choice([i for i in range(0,9) if i not in [2,5,7]]))
-
-my_list = [i for i in range(1000)]
-for j in X:
-    my_list.remove(j)
-
-    for k in parts_dict:
+    print(parts_dict[key]["long_answer"])
+    for i in range(len(parts_dict[key]["answer_end_ix"])):
+        start = parts_dict[key]["answer_start_ix"][i]
+        end = parts_dict[key]["answer_end_ix"][i]
+        passage = np.array(parts_dict[key]["passages"][i].split())
         print("\n")
-        print(k)
-        print("\n")
-        for i in range(len(parts_dict[k]["answer_start_ix"])):
-            if parts_dict[k]["answer_start_ix"][i] != 0:
-                start = parts_dict[k]["answer_start_ix"][i]
-                end = parts_dict[k]["answer_end_ix"][i]
-                print('\n')
-                print(parts_dict[k]["question_text"])
-                print('\n')
-                print(parts_dict[k]["passages"][i])
-                print('\n')
-                print(parts_dict[k]["passages"][i].split()[start:end])
-                print('\n')
-                print(parts_dict[k]["long_answer"])
+        print(passage[start:end])
 
     input_ids = []
 
