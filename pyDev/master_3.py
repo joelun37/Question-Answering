@@ -35,9 +35,18 @@ import re
 import json 
 import torch
 import numpy as np
+import random
 import matplotlib.pyplot as plt 
+import time
+import datetime
+
+
 from transformers import BertTokenizer
-from transformers import BertForQuestionAnswering
+from transformers import BertForQuestionAnswering, AdamW, BertConfig
+from transformers import get_linear_schedule_with_warmup
+
+from torch.utils.data import TensorDataset, random_split
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 from sklearn.decomposition import PCA
 from sklearn.decomposition import TruncatedSVD
@@ -45,9 +54,42 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
+# utils
+def search_sequence_numpy(arr,seq):
+    """ Find sequence in an array using NumPy only.
+
+    Parameters
+    ----------    
+    arr    : input 1D array
+    seq    : input 1D array
+
+    Output
+    ------    
+    Output : 1D Array of indices in the input array that satisfy the 
+    matching of input sequence in the input array.
+    In case of no match, an empty list is returned.
+    """
+
+    # Store sizes of input array and sequence
+    Na, Nseq = arr.size, seq.size
+
+    # Range of sequence
+    r_seq = np.arange(Nseq)
+
+    # Create a 2D array of sliding indices across the entire length of input array.
+    # Match up with the input sequence & get the matching starting indices.
+    M = (arr[np.arange(Na-Nseq+1)[:,None] + r_seq] == seq).all(1)
+
+    # Get the range of those indices as final output
+    if M.any() >0:
+        return np.where(np.convolve(M,np.ones((Nseq),dtype=int))>0)[0]
+    else:
+        return []         # No match found
+
 # Set parameters and paths
 pyData = "/Volumes/750GB-HDD/root/Question-Answering/pyData/"
-# tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
 # model = BertModel.from_pretrained('bert-base-uncased')
 
 # Import data
@@ -61,8 +103,6 @@ because it goes beyong the end of the paragraph.
 A quick way around this issue for shorter paragraphs is to take 
 shorter windows and step sizes.
 
-Since we are dealng with long Wikipedia pages, we always set the window to 520.
-As a result we do not need attention masks because our data won't contain paddings.
 """
 sentence=obs["document_text"]
 lst_sentence = sentence.split()
@@ -80,7 +120,7 @@ for i in range(len(parts_dict[obs["example_id"]])):
                         add_special_tokens = True, # Add '[CLS]' and '[SEP]'
                         max_length = 520,           # Pad & truncate all sentences.
                         pad_to_max_length = True,
-                        # return_attention_mask = True,   # Construct attn. masks.
+                        return_attention_mask = True,   # Construct attn. masks.
                         return_tensors = 'pt'     # Return pytorch tensors.
                 )
     input_ids.append(encoded_dict["input_ids"])
@@ -157,24 +197,21 @@ for key in parts_dict.keys():
         #     parts_dict[obs["example_id"]]["answer_end_ix"].append(end_ix)
 
     # Downsampling
-        for key in parts_dict.keys():
-            if len(np.argwhere(parts_dict[key]["answer_start_ix"])) > 0:
-                valid_ix = np.argwhere(parts_dict[key]["answer_start_ix"])
-                valid_ix = valid_ix.reshape(1, -1)[0].tolist()
-                all_ix = [i for i in range(len(parts_dict[key]["answer_start_ix"]))]
-                null_sample_ix = np.random.choice(all_ix, len(valid_ix)).tolist()
-                sample_ix = valid_ix + null_sample_ix
-
-                print(key)
-
-                parts_dict[key]["answer_start_ix"] = np.array(parts_dict[key]["answer_start_ix"])[sample_ix]
-                parts_dict[key]["answer_end_ix"] = np.array(parts_dict[key]["answer_end_ix"])[sample_ix]
-                parts_dict[key]["passages"] = np.array(parts_dict[key]["passages"])[sample_ix]
-
-                print(key)
-                print(len(parts_dict[key]["answer_start_ix"]))
-                print(len(parts_dict[key]["answer_end_ix"]))
-                print(len(parts_dict[key]["passages"]))
+for key in parts_dict.keys():
+    if len(np.argwhere(parts_dict[key]["answer_start_ix"])) > 0:
+        valid_ix = np.argwhere(parts_dict[key]["answer_start_ix"])
+        valid_ix = valid_ix.reshape(1, -1)[0].tolist()
+        all_ix = [i for i in range(len(parts_dict[key]["answer_start_ix"]))]
+        null_sample_ix = np.random.choice(all_ix, len(valid_ix)).tolist()
+        sample_ix = valid_ix + null_sample_ix
+        print(key)
+        parts_dict[key]["answer_start_ix"] = np.array(parts_dict[key]["answer_start_ix"])[sample_ix]
+        parts_dict[key]["answer_end_ix"] = np.array(parts_dict[key]["answer_end_ix"])[sample_ix]
+        parts_dict[key]["passages"] = np.array(parts_dict[key]["passages"])[sample_ix]
+        print(key)
+        print(len(parts_dict[key]["answer_start_ix"]))
+        print(len(parts_dict[key]["answer_end_ix"]))
+        print(len(parts_dict[key]["passages"]))
 
 # Sanity check
 for key in parts_dict.keys():
@@ -189,31 +226,232 @@ for key in parts_dict.keys():
         print("\n")
         print(passage[start:end])
 
-    input_ids = []
+# parts_dict[8933277615800380148].keys()
+# dict_keys(['question_text', 'passages', 'answer_start_ix', 'answer_end_ix', 'long_answer'])
+# parts_dict[8933277615800380148]["question_text"]
 
-    for i in range(len(parts_dict[obs["example_id"]])):
-        encoded_dict = tokenizer.encode_plus(obs["question_text"],
-                            parts_dict[obs["example_id"]][i],                      # Sentence to encode.
-                            add_special_tokens = True, # Add '[CLS]' and '[SEP]'
-                            max_length = 520,           # Pad & truncate all sentences.
-                            pad_to_max_length = True,
-                            # return_attention_mask = True,   # Construct attn. masks.
-                            return_tensors = 'pt'     # Return pytorch tensors.
-                    )
-        input_ids.append(encoded_dict["input_ids"])
-    transformed_dict_obs[key]["input_ids"] = input_ids
-    transformed_dict_obs[key]["question_text"] = obs["question_text"]
-    transformed_dict_obs[key]["annotations"] = obs["annotations"]
+for key in parts_dict.keys():
+    for i in range(len(parts_dict[key]["passages"])):
+        print(f"Question: {parts_dict[key]["question_text"]}")
+        print(f"Passage: {parts_dict[key]["passages"][i]}")
+        
 
-    la_start = transformed_dict_obs[key]["annotations"][0]["long_answer"]["start_token"]
-    la_end = transformed_dict_obs[key]["annotations"][0]["long_answer"]["end_token"]
-    long_answer = []
-    for word_ix in range(la_start, la_end):
-        long_answer.append(lst_sentence[word_ix])
-    transformed_dict_obs[key]["long_answer"] = long_answer
-    # transformed_dict_obs[key]["input_ids"] = input_ids
-    # transformed_dict_obs[key]["question_text"] = obs["question_text"]
-    # transformed_dict_obs[key]["annotations"] = obs["annotations"]
+
+
+
+input_ids = []
+attention_masks = []
+token_type_ids = []
+start_positions = []
+end_positions = []
+
+for key in parts_dict.keys():
+    # key = 5655493461695504401
+    for i in range(len(parts_dict[key]["passages"])):
+        encoded_dict = tokenizer.encode_plus(parts_dict[key]["question_text"],
+                                             parts_dict[key]["passages"][i],                      # Sentence to encode.
+                                             add_special_tokens = True, # Add '[CLS]' and '[SEP]'
+                                             max_length = 512,           # Pad & truncate all sentences.
+                                             pad_to_max_length = True,
+                                             return_attention_mask = True,   # Construct attn. masks.
+                                             return_tensors = 'pt'     # Return pytorch tensors.
+                                        )
+        # Add the encoded sentence to the list.    
+        input_ids.append(encoded_dict['input_ids'])
+        
+        # And its attention mask (simply differentiates padding from non-padding).
+        attention_masks.append(encoded_dict['attention_mask'])
+
+        # Token type ids
+        token_type_ids.append(encoded_dict['token_type_ids'])
+
+        # Tokenize ans and inputs
+        tokenized_input = np.array(tokenizer.convert_ids_to_tokens(encoded_dict['input_ids'].tolist()[0]))
+        tokenized_long_answer = np.array(tokenizer.tokenize(" ".join(parts_dict[key]["long_answer"])))
+
+        # Search answer in the input
+        pos_answer = search_sequence_numpy(tokenized_input, tokenized_long_answer)
+
+        # Start positions
+        if len(pos_answer) > 0:
+            start_positions.append(np.min(pos_answer))
+        else:
+            start_positions.append(0)
+
+        # End positions
+        if len(pos_answer) > 0:
+            end_positions.append(np.max(pos_answer))
+        else:
+            end_positions.append(0)
+            
+ans = np.array(tokenizer.tokenize(" ".join(parts_dict[5655493461695504401]["long_answer"])))
+ans_start = np.min(search_sequence_numpy(tokens, ans))
+ans_end = np.max(search_sequence_numpy(tokens, ans))
+
+np.array(tokenizer.convert_ids_to_tokens(input_ids[0].tolist()[0]))[ans_start:ans_end]
+
+
+
+
+# print(np.array(tokenizer.convert_ids_to_tokens(input_ids[0].tolist()[0])))
+# print(np.array(tokenizer.convert_ids_to_tokens(input_ids[0].tolist()[0]))[288:355])
+print(" ".join(parts_dict[5655493461695504401]["long_answer"]))
+# print(input_ids[0].tolist()[0])
+# print(start_positions[0])
+# print(end_positions[0])
+# a = torch.tensor(np.array([1, 2]))
+
+# encoded_dict["attention_mask"].size()
+
+# Convert the lists into tensors.
+input_ids = torch.cat(input_ids, dim=0)
+attention_masks = torch.cat(attention_masks, dim=0)
+
+
+# Combine the training inputs into a TensorDataset.
+dataset = TensorDataset(input_ids, attention_masks)
+
+# Create a 90-10 train-validation split.
+
+# Calculate the number of samples to include in each set.
+train_size = int(0.9 * len(dataset))
+val_size = len(dataset) - train_size
+
+# Divide the dataset by randomly selecting samples.
+train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+print('{:>5,} training samples'.format(train_size))
+print('{:>5,} validation samples'.format(val_size))
+
+# The DataLoader needs to know our batch size for training, so we specify it 
+# here. For fine-tuning BERT on a specific task, the authors recommend a batch 
+# size of 16 or 32.
+batch_size = 32
+
+# Create the DataLoaders for our training and validation sets.
+# We'll take training samples in random order. 
+train_dataloader = DataLoader(
+            train_dataset,  # The training samples.
+            sampler = RandomSampler(train_dataset), # Select batches randomly
+            batch_size = batch_size # Trains with this batch size.
+        )
+
+# For validation the order doesn't matter, so we'll just read them sequentially.
+validation_dataloader = DataLoader(
+            val_dataset, # The validation samples.
+            sampler = SequentialSampler(val_dataset), # Pull out batches sequentially.
+            batch_size = batch_size # Evaluate with this batch size.
+        )
+
+# model = BertForQuestionAnswering.from_pretrained(
+#     "bert-base-uncased", # Use the 12-layer BERT model, with an uncased vocab.
+#     output_attentions = False, # Whether the model returns attentions weights.
+#     output_hidden_states = False, # Whether the model returns all hidden-states.
+# )
+model = BertForQuestionAnswering.from_pretrained('bert-base-uncased')
+
+
+# input_ids=None,
+#         attention_mask=None,
+#         token_type_ids=None,
+#         position_ids=None,
+#         head_mask=None,
+#         inputs_embeds=None,
+#         start_positions=None,
+#         end_positions=None,
+#     ):
+
+# CREATE start and end position tensors
+# Token types are important: sentence one and sentence two
+
+start_scores, end_scores = model(input_ids, 
+                             token_type_ids=None, 
+                             attention_mask=attention_masks, 
+                             start_positions=)
+
+# Tell pytorch to run this model on the GPU.
+# model.cuda()
+
+params = list(model.named_parameters())
+
+print('The BERT model has {:} different named parameters.\n'.format(len(params)))
+
+print('==== Embedding Layer ====\n')
+
+for p in params[0:5]:
+    print("{:<55} {:>12}".format(p[0], str(tuple(p[1].size()))))
+
+print('\n==== First Transformer ====\n')
+
+for p in params[5:21]:
+    print("{:<55} {:>12}".format(p[0], str(tuple(p[1].size()))))
+
+print('\n==== Output Layer ====\n')
+
+for p in params[-4:]:
+    print("{:<55} {:>12}".format(p[0], str(tuple(p[1].size()))))
+
+# Note: AdamW is a class from the huggingface library (as opposed to pytorch) 
+# I believe the 'W' stands for 'Weight Decay fix"
+optimizer = AdamW(model.parameters(),
+                  lr = 2e-5, # args.learning_rate - default is 5e-5, our notebook had 2e-5
+                  eps = 1e-8 # args.adam_epsilon  - default is 1e-8.
+                )
+
+
+# Number of training epochs. The BERT authors recommend between 2 and 4. 
+# We chose to run for 4, but we'll see later that this may be over-fitting the
+# training data.
+epochs = 4
+
+# Total number of training steps is [number of batches] x [number of epochs]. 
+# (Note that this is not the same as the number of training samples).
+total_steps = len(train_dataloader) * epochs
+
+# Create the learning rate scheduler.
+scheduler = get_linear_schedule_with_warmup(optimizer, 
+                                            num_warmup_steps = 0, # Default value in run_glue.py
+                                            num_training_steps = total_steps)
+
+def format_time(elapsed):
+    '''
+    Takes a time in seconds and returns a string hh:mm:ss
+    '''
+    # Round to the nearest second.
+    elapsed_rounded = int(round((elapsed)))
+    
+    # Format as hh:mm:ss
+    return str(datetime.timedelta(seconds=elapsed_rounded))
+
+
+
+seed_val = 42
+
+random.seed(seed_val)
+np.random.seed(seed_val)
+torch.manual_seed(seed_val)
+torch.cuda.manual_seed_all(seed_val)
+
+# We'll store a number of quantities such as training and validation loss, 
+# validation accuracy, and timings.
+training_stats = []
+
+# Measure the total training time for the whole run.
+total_t0 = time.time()
+
+
+transformed_dict_obs[key]["input_ids"] = input_ids
+transformed_dict_obs[key]["question_text"] = obs["question_text"]
+transformed_dict_obs[key]["annotations"] = obs["annotations"]
+la_start = transformed_dict_obs[key]["annotations"][0]["long_answer"]["start_token"]
+la_end = transformed_dict_obs[key]["annotations"][0]["long_answer"]["end_token"]
+long_answer = []
+for word_ix in range(la_start, la_end):
+    long_answer.append(lst_sentence[word_ix])
+transformed_dict_obs[key]["long_answer"] = long_answer
+# transformed_dict_obs[key]["input_ids"] = input_ids
+# transformed_dict_obs[key]["question_text"] = obs["question_text"]
+# transformed_dict_obs[key]["annotations"] = obs["annotations"]
 
 for key in transformed_dict_obs.keys():
     print(transformed_dict_obs[key]["question_text"])
